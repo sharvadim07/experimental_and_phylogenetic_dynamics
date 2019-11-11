@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["-etest_full_4_equation.txt", "-l100"]
+            "args": ["-ezODE4r_equation_v2_fixed_init_var.txt", "-l100"]
         }
     ]
 }
