@@ -92,15 +92,50 @@ def read_init_values_file(init_values_file_name):
 
 def get_Jacobian(equations_dict):
     import symengine
-    variables = symengine.symbols(' '.join(equations_dict)) # Define variables
-    f = symengine.sympify(['+'.join(equations_dict[eq]).replace('+-','-') for eq in equations_dict]) # Define function
-    J = symengine.zeros(len(f),len(variables)) # Initialise Jacobian matrix
+    #Temporarly replace E variable to RE
+    new_eq_dict = {}
+    for eq in equations_dict:
+        if eq == 'E':            
+            new_eq_dict['RE'] =  [term.replace('E', 'RE') for term in equations_dict[eq]]
+        else:
+            new_eq_dict[eq] = [term.replace('E', 'RE') for term in equations_dict[eq]]
 
+    variables = symengine.symbols(' '.join(new_eq_dict)) # Define variables
+    f = symengine.sympify(['+'.join(new_eq_dict[eq]).replace('+-','-') for eq in new_eq_dict]) # Define function
+    #J = symengine.zeros(len(f),len(variables)) # Initialise Jacobian matrix
+    J_str = [['' for x in range(len(variables))] for y in range(len(f))] # Initialise Jacobian matrix with strings
     # Fill Jacobian matrix with entries
     for i, fi in enumerate(f):
         for j, s in enumerate(variables):
-            J[i,j] = symengine.diff(fi, s)
-    return J
+            J_str[i][j] = str(symengine.diff(fi, s)).replace('RE', 'E')
+    return J_str
+
+def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
+    for py_pow in re_res_positive_pow:
+        index_py_pow = eq.index(py_pow)
+        cur_py_pow = py_pow
+        if py_pow[0] == ')':
+            bracket_right_counter = 1
+            bracket_left_counter = 0            
+            for i, ch in enumerate(eq[index_py_pow - 1::-1]):
+                if ch == ')':
+                    bracket_right_counter += 1
+                elif ch == '(':
+                    bracket_left_counter += 1
+                cur_py_pow = ch + cur_py_pow
+                if bracket_right_counter == bracket_left_counter and \
+                    eq[index_py_pow - i - 2] in '*/+-':
+                    break                   
+        else:
+            for i, ch in enumerate(eq[index_py_pow - 1::-1]):                
+                if eq[index_py_pow - i - 1] in '*/+-':
+                    break 
+                else:
+                    cur_py_pow = ch + cur_py_pow
+        exp_number = cur_py_pow.split('**')[0]
+        exponent = cur_py_pow.split('**')[1]
+        new_j_eq = eq.replace(cur_py_pow, 'pow(' + exp_number + ',' + exponent + ')')
+    return new_j_eq
 
 def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counter):    
     with open(c_code_pattern_file_name, 'r') as c_code_pattern_file:
@@ -143,12 +178,14 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                             if i == 0 or j == 0:
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = 0;\n')
                             else:
-                                new_j_eq = str(jac_mat[i - 1, j - 1])
-                                re_res = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq)
-                                for py_pow_term in re_res:
-                                    exp_number = py_pow_term.split('**')[0]
-                                    exponent = py_pow_term.split('**')[1]
-                                    new_j_eq = new_j_eq.replace(py_pow_term, 'pow(' + exp_number + ',' + exponent + ')')
+                                new_j_eq = str(jac_mat[i - 1][j - 1])
+                                #TODO: Need to check this equation
+                                #-G*r1/(E*(Lm + (G + J)/E)) + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)**2)
+                                #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq)                                
+                                re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                while len(re_res_positive_pow) != 0:                                
+                                    new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
+                                    re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
                                 for repl_ch in repl_dict:
                                     new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
