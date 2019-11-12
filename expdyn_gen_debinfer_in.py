@@ -9,8 +9,8 @@ import xml.etree.cElementTree as ET
 parser = argparse.ArgumentParser(description='Generating XML for PhyDyn BEAST')
 parser.add_argument('-e','--equations', type=str,                   
                     help='Equations (ODE).', required=True)
-parser.add_argument('-l','--mcmc_iter', type=int,                   
-                    help='Number of mcmc iterations.', required=True)
+# parser.add_argument('-l','--mcmc_iter', type=int,                   
+#                     help='Number of mcmc iterations.', required=True)
 
 args = parser.parse_args()      
 
@@ -202,8 +202,15 @@ def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par
                         
 def gen_initial_values_deBInfer(initial_values_deBInfer_file_name, var_init_values_dict):
     with open(initial_values_deBInfer_file_name, 'w') as initial_values_deBInfer_file:
-        pass
+        for var_init_val in var_init_values_dict:
+            if '_initval' in var_init_val:
+                initial_values_deBInfer_file.write(repl_dict[var_init_val.split('_')[0]].replace('[','').replace(']','') + \
+                                                    '=' + str(var_init_values_dict[var_init_val]) + '\n')
 
+def write_names_dict(names_dict_file_name):
+    with open(names_dict_file_name, 'w') as names_dict_file:
+        for repl in repl_dict:
+            names_dict_file.write(repl + '\t' + repl_dict[repl].replace('[','').replace(']','') + '\n')
 
 equations_dict = read_equations_file(args.equations)
 par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_file(args.equations)
@@ -212,3 +219,4 @@ par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_fil
 edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_name_list))
 generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
 gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict)
+write_names_dict('repl_dict.txt')
