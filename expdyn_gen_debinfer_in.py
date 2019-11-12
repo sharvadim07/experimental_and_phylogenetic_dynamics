@@ -9,6 +9,10 @@ import xml.etree.cElementTree as ET
 parser = argparse.ArgumentParser(description='Generating XML for PhyDyn BEAST')
 parser.add_argument('-e','--equations', type=str,                   
                     help='Equations (ODE).', required=True)
+parser.add_argument('-t','--target_traj', type=str,                   
+                    help='Target trajectory in PhyDyn format.', required=False)
+parser.add_argument('-n','--num_of_target_points', type=str,                   
+                    help='Number of time points from trajectory.', required=False)
 # parser.add_argument('-l','--mcmc_iter', type=int,                   
 #                     help='Number of mcmc iterations.', required=True)
 
@@ -212,6 +216,24 @@ def write_names_dict(names_dict_file_name):
         for repl in repl_dict:
             names_dict_file.write(repl + '\t' + repl_dict[repl].replace('[','').replace(']','') + '\n')
 
+def edit_target_traj_file(target_traj_file_name, num_of_target_points):
+    num_lines_in_target_traj_file = sum(1 for line in open(target_traj_file_name, 'r'))
+    with open(target_traj_file_name, 'r') as in_target_traj_file:        
+        step = int((num_lines_in_target_traj_file-1)/int(num_of_target_points))
+        with open('updated_' + target_traj_file_name, 'w') as out_target_traj_file:
+            for i, line_in in enumerate(in_target_traj_file):
+                line_in_list = line_in.strip().split('\t')
+                if i == 0:
+                    new_line_in_list = [repl_dict[el_line_in_list[:-1]].replace('[','').replace(']','') 
+                                        if el_line_in_list != 't' 
+                                        else 'time'  
+                                        for el_line_in_list in line_in_list[1:]]
+                    out_target_traj_file.write('\t'.join(new_line_in_list) + '\n')
+                elif i%step == 0 :
+                    out_target_traj_file.write('\t'.join(line_in_list[1:]) + '\n')
+                
+
+
 equations_dict = read_equations_file(args.equations)
 par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_file(args.equations)
 
@@ -220,3 +242,8 @@ edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c"
 generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
 gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict)
 write_names_dict('repl_dict.txt')
+
+if args.target_traj != None and args.num_of_target_points != None:
+    edit_target_traj_file(args.target_traj, args.num_of_target_points)
+    
+

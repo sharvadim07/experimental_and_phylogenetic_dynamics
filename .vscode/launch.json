@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["-ezODE4r_equation_v2_fixed_init_var.txt"]
+            "args": ["-ezODE4r_equation_v2_fixed_init_var.txt", "-tMDBDPhyDyn_m1_first.traj", "-n5"]
         }
     ]
 }
