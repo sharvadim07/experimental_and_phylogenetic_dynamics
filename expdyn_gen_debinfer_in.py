@@ -220,7 +220,7 @@ def edit_target_traj_file(target_traj_file_name, num_of_target_points):
     num_lines_in_target_traj_file = sum(1 for line in open(target_traj_file_name, 'r'))
     with open(target_traj_file_name, 'r') as in_target_traj_file:        
         step = int((num_lines_in_target_traj_file-1)/int(num_of_target_points))
-        with open('updated_' + target_traj_file_name, 'w') as out_target_traj_file:
+        with open('updated_target_trajectory.txt', 'w') as out_target_traj_file:
             for i, line_in in enumerate(in_target_traj_file):
                 line_in_list = line_in.strip().split('\t')
                 if i == 0:
