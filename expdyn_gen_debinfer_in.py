@@ -39,11 +39,11 @@ def read_init_values_file(init_values_file_name):
     par_init_values_dict = {}
     var_init_values_dict = {}
     par_name_list = []
+    param_counter = 0
     #var_name_list = []
     with open(init_values_file_name, 'r') as init_values_file:
         StartValuesOfparameters = False
-        StartValuesOfequations = False
-        param_counter = 0
+        StartValuesOfequations = False        
         #var_counter = 0
         for line in init_values_file:
             if line == '\n':
@@ -179,8 +179,6 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = 0;\n')
                             else:
                                 new_j_eq = str(jac_mat[i - 1][j - 1])
-                                #TODO: Need to check this equation
-                                #-G*r1/(E*(Lm + (G + J)/E)) + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)**2)
                                 #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq)                                
                                 re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
                                 while len(re_res_positive_pow) != 0:                                
@@ -201,10 +199,16 @@ def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par
                                     str(par_init_values_dict[par + '_min']) + '\t' + \
                                     str(par_init_values_dict[par + '_max']) + '\t' + \
                                     '# ' + par + '\n')
+                        
+def gen_initial_values_deBInfer(initial_values_deBInfer_file_name, var_init_values_dict):
+    with open(initial_values_deBInfer_file_name, 'w') as initial_values_deBInfer_file:
+        pass
+
 
 equations_dict = read_equations_file(args.equations)
 par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_file(args.equations)
 
 
-edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_init_values_dict))
+edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_name_list))
 generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
+gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict)
