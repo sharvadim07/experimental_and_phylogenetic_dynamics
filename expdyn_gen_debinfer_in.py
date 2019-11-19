@@ -4,8 +4,7 @@ import os
 import re
 import xml.etree.cElementTree as ET
 
-#
-#            "args": ["-mzikv_shorah2_group_1_hapl_MSA.fasta", "-tbeast_init_last_corr.tree", "-ifasta_info.txt", "-etest_full_4_equation.txt", "-l20000", "-s5000", "-r1.1"]
+#"args": ["-ezODE4r_equation_v2_fixed_init_var.txt", "-tMDBDPhyDyn_m1_first.traj", "-n10"]
 parser = argparse.ArgumentParser(description='Generating XML for PhyDyn BEAST')
 parser.add_argument('-e','--equations', type=str,                   
                     help='Equations (ODE).', required=True)
@@ -132,7 +131,7 @@ def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
                     break                   
         else:
             for i, ch in enumerate(eq[index_py_pow - 1::-1]):                
-                if eq[index_py_pow - i - 1] in '*/+-':
+                if eq[index_py_pow - i - 1] in '*/+-(':
                     break 
                 else:
                     cur_py_pow = ch + cur_py_pow
@@ -144,13 +143,13 @@ def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
 def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counter):    
     with open(c_code_pattern_file_name, 'r') as c_code_pattern_file:
         with open('updated_' + os.path.basename(c_code_pattern_file_name), 'w') as updated_c_code_file:
-            need_add_num_eq = False
+            need_add_num_par = False
             need_add_derivs_eq = False
             need_add_derivs_sum_vars = False
             need_add_jacobian = False
             for c_code_patt_line in c_code_pattern_file:
                 if '// global num of parameters' in c_code_patt_line:
-                    need_add_num_eq = True
+                    need_add_num_par = True
                     updated_c_code_file.write(c_code_patt_line) 
                 elif '// derivs Equations start' in c_code_patt_line:
                     need_add_derivs_eq = True
@@ -161,9 +160,9 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                 elif '//jac Jacobian start' in c_code_patt_line:
                     need_add_jacobian = True
                     updated_c_code_file.write(c_code_patt_line)  
-                elif need_add_num_eq == True:
+                elif need_add_num_par == True:
                     updated_c_code_file.write('#define NUM_OF_PAR ' + str(params_counter + 1) + '\n')
-                    need_add_num_eq = False
+                    need_add_num_par = False
                 elif need_add_derivs_eq == True:
                     for eq in equations_dict:
                         new_eq = '+'.join(equations_dict[eq]).replace('+-','-')
@@ -183,7 +182,8 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = 0;\n')
                             else:
                                 new_j_eq = str(jac_mat[i - 1][j - 1])
-                                #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq)                                
+                                #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq) 
+                                # W*k1 + G*M*a1/E**2 + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)) - G*(G + J)**2*r1/(E**3*(Lm + (G + J)/E)**2)                               
                                 re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
                                 while len(re_res_positive_pow) != 0:                                
                                     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
@@ -194,6 +194,94 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                     need_add_jacobian = False
                 else:
                     updated_c_code_file.write(c_code_patt_line) 
+
+def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_counter, var_init_values_dict): 
+    with open(c_code_solve_pattern_file_name, 'r') as c_code_solve_pattern_file:
+        with open('updated_' + os.path.basename(c_code_solve_pattern_file_name), 'w') as updated_c_code_solve_file:
+            need_add_num_par = False
+            need_add_num_eq = False
+            need_add_derivs_eq = False
+            need_add_derivs_sum_vars = False
+            need_add_jacobian = False
+            need_add_dfdt = False
+            need_add_print_header = False
+            need_add_init_var_val = False
+            for c_code_patt_line in c_code_solve_pattern_file:
+                if '// global num of parameters' in c_code_patt_line:
+                    need_add_num_par = True
+                    updated_c_code_solve_file.write(c_code_patt_line) 
+                if '// global num of equations' in c_code_patt_line:
+                    need_add_num_eq = True
+                    updated_c_code_solve_file.write(c_code_patt_line) 
+                elif '// derivs Equations start' in c_code_patt_line:
+                    need_add_derivs_eq = True
+                    updated_c_code_solve_file.write(c_code_patt_line) 
+                elif '// derivs Sum of vars' in c_code_patt_line:
+                    need_add_derivs_sum_vars = True
+                    updated_c_code_solve_file.write(c_code_patt_line)
+                elif '//jac Jacobian start' in c_code_patt_line:
+                    need_add_jacobian = True
+                    updated_c_code_solve_file.write(c_code_patt_line)  
+                elif '//dfdt start' in c_code_patt_line:
+                    need_add_dfdt = True
+                    updated_c_code_solve_file.write(c_code_patt_line)  
+                elif '// print header traj file' in c_code_patt_line:
+                    need_add_print_header = True
+                    updated_c_code_solve_file.write(c_code_patt_line) 
+                elif '//initial variables values start' in c_code_patt_line:
+                    need_add_init_var_val = True
+                    updated_c_code_solve_file.write(c_code_patt_line) 
+                elif need_add_num_par == True:
+                    updated_c_code_solve_file.write('#define param_num  ' + str(params_counter) + '\n')
+                    need_add_num_par = False
+                elif need_add_num_eq == True:
+                    updated_c_code_solve_file.write('#define dim ' + str(len(equations_dict)) + '\n')
+                    need_add_num_eq = False
+                elif need_add_derivs_eq == True:
+                    for eq in equations_dict:
+                        new_eq = '+'.join(equations_dict[eq]).replace('+-','-')
+                        for repl_ch in repl_dict:
+                            new_eq = new_eq.replace(repl_ch, repl_dict[repl_ch])
+                        new_eq = 'res' + repl_dict[eq][1:] + '=' + new_eq
+                        updated_c_code_solve_file.write(new_eq + ';\n')
+                    need_add_derivs_eq = False
+                elif need_add_derivs_sum_vars == True:
+                    updated_c_code_solve_file.write('yout[0]=' + '+'.join([repl_dict[eq] for eq in equations_dict]) + ';\n')
+                    need_add_derivs_sum_vars = False
+                elif need_add_jacobian == True:
+                    jac_mat = get_Jacobian(equations_dict)
+                    for i in range(len(equations_dict) + 1):
+                        for j in range(len(equations_dict) + 1):
+                            if i == 0 or j == 0:
+                                updated_c_code_solve_file.write('J('+ str(i) +', '+ str(j) +') = 0;\n')
+                            else:
+                                new_j_eq = str(jac_mat[i - 1][j - 1])
+                                #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq) 
+                                # W*k1 + G*M*a1/E**2 + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)) - G*(G + J)**2*r1/(E**3*(Lm + (G + J)/E)**2)                               
+                                re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                while len(re_res_positive_pow) != 0:                                
+                                    new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
+                                    re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                for repl_ch in repl_dict:
+                                    new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
+                                updated_c_code_solve_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
+                    need_add_jacobian = False
+                elif need_add_dfdt == True:
+                    for i in range(len(equations_dict) + 1):
+                        updated_c_code_solve_file.write('dfdt[' + str(i) + '] = 0;\n')
+                    need_add_dfdt = False
+                elif need_add_print_header == True:
+                    updated_c_code_solve_file.write('cout << \"#time\\t' + \
+                                                    '\\t'.join(equations_dict) + '\" << endl;')
+                    need_add_print_header = False
+                elif need_add_init_var_val == True:
+                    for eq in equations_dict:                         
+                        updated_c_code_solve_file.write(repl_dict[eq] + '=' + str(var_init_values_dict[eq + '_initval']) + ';\n' )
+                    need_add_init_var_val = False
+                else:
+                    updated_c_code_solve_file.write(c_code_patt_line) 
+
+
 
 def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par_name_list):
     with open(param_ranges_file_name, 'w') as param_ranges_file:
@@ -239,6 +327,7 @@ par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_fil
 
 
 edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_name_list))
+edit_solve_C_code(os.path.dirname(os.path.realpath(__file__)) + "/solve.cpp", equations_dict, len(par_name_list), var_init_values_dict)
 generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
 gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict)
 write_names_dict('repl_dict.txt')

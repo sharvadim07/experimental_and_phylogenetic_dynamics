@@ -5,11 +5,11 @@
 #define Max(a, b) ((a > b) ? a : b)
 #define J(a, b) pd[a*(*nrowpd) + b]
 
-static double a_log[17];
-double alpha = 1;
-
 // global num of parameters
 //#define NUM_OF_PAR 17
+
+static double a_log[NUM_OF_PAR];
+//double alpha = 1;
 
 /* initializer */
 void initmod(void (* odeparms)(int *, double *)) {    
