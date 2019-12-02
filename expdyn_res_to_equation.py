@@ -38,7 +38,15 @@ def read_debinfer_output(debinfer_output_file_name, repl_dict_file_name, step_li
                     raise ValueError('debinfer output file format is bad!')
                 for i, name in enumerate(par_names_tuple):
                     par_init_values_dict[str(step_num) + '_' + name] = 10.0**float(par_val_tuple[i]) # LOG10 to simple number
-    return par_init_values_dict, step_list
+    return par_init_values_dict, step_list, par_names_tuple
+
+def write_unified_params_file(unified_params_file_name, par_init_values_dict, step_list, par_names_tuple):
+    with open(unified_params_file_name, 'w') as unified_params_file:
+        unified_params_file.write('mcmc_step\t' + '\t'.join(par_names_tuple) + '\n')
+        for step in step_list:
+            unified_params_file.write(str(step) + '\t' + \
+                                      '\t'.join([str(par_init_values_dict[str(step) + '_' + par_name]) for par_name in par_names_tuple]) + \
+                                       '\n')
 
 def read_write_init_values_file(init_values_file_name, par_init_values_dict, step_list):
     init_values_line_list = []
@@ -78,5 +86,6 @@ def read_write_init_values_file(init_values_file_name, par_init_values_dict, ste
                 else:
                     out_eq_init_values_file.write(line)
 
-par_init_values_dict, step_list =  read_debinfer_output(args.debinfer_output, args.repl_dict, args.step_list)
+par_init_values_dict, step_list, par_names_tuple =  read_debinfer_output(args.debinfer_output, args.repl_dict, args.step_list)
+write_unified_params_file('unified_params.txt', par_init_values_dict, step_list, par_names_tuple)
 read_write_init_values_file(args.equations, par_init_values_dict, step_list)

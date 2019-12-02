@@ -5,12 +5,28 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Текущий файл",
+            "name": "Python: expdyn_gen_debinfer_in.py",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["-ezODE4r_equation_v2_fixed_init_var.txt", "-tMDBDPhyDyn_m1_first.traj", "-n5"]
+            "args": ["-eexample_data/zODE4r_equation_v2_fixed_init_var.txt", "-texample_data/target_tragectory_one_var.txt", "-n16"]
+        },
+        {
+            "name": "Python: find_residual.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["-texample_data/target_tragectory_one_var.txt", "-cexample_data/5000_phy_trajectory.txt"]
+        },
+        {
+            "name": "Python: expdyn_res_to_equation.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["-eexample_data/zODE4r_equation_v2_fixed_init_var.txt", "-rexample_data/repl_dict.txt", "-sexample_data/step_list.txt", "-dexample_data/deBInfer_output_Nth.txt"]
         }
     ]
 }

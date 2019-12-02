@@ -5,7 +5,7 @@ import re
 import xml.etree.cElementTree as ET
 
 #"args": ["-ezODE4r_equation_v2_fixed_init_var.txt", "-tMDBDPhyDyn_m1_first.traj", "-n10"]
-parser = argparse.ArgumentParser(description='Generating XML for PhyDyn BEAST')
+parser = argparse.ArgumentParser(description='Generating files for ExpDyn and Solver')
 parser.add_argument('-e','--equations', type=str,                   
                     help='Equations (ODE).', required=True)
 parser.add_argument('-t','--target_traj', type=str,                   
@@ -312,7 +312,7 @@ def edit_target_traj_file(target_traj_file_name, num_of_target_points):
             for i, line_in in enumerate(in_target_traj_file):
                 line_in_list = line_in.strip().split('\t')
                 if i == 0:
-                    new_line_in_list = [repl_dict[el_line_in_list[:-1]].replace('[','').replace(']','') 
+                    new_line_in_list = [repl_dict[re.sub('[0-9]', '', el_line_in_list)].replace('[','').replace(']','') 
                                         if el_line_in_list != 't' 
                                         else 'time'  
                                         for el_line_in_list in line_in_list[1:]]
