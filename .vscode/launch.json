@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["-texample_data/target_tragectory_one_var.txt", "-cexample_data/5000_phy_trajectory.txt"]
+            "args": ["-texample_data/target_tragectory_one_var.txt", "-cexample_data/0_phy_trajectory.txt"]
         },
         {
             "name": "Python: expdyn_res_to_equation.py",
