@@ -32,10 +32,20 @@ def read_equations_file(equations_file_name):
                 eq_name = eq_name_reres.group(1)               
                 equations_dict[eq_name] = []
                 repl_dict[eq_name] = 'x[' + str(eq_counter) + ']'
-                line_str_terms = line.strip().split('+(')[1:]
+                delimiters = "+(p", "+(-p"
+                regexPattern = '(' + '|'.join(map(re.escape, delimiters)) + ')'
+                line_str_terms = re.split(regexPattern, line.strip())[1:]
+                line_str_terms_upd = []
+                for i, str_term in enumerate(line_str_terms):
+                    if i % 2 == 0:
+                        line_str_terms_upd.append(line_str_terms[i] + line_str_terms[i + 1])
+                line_str_terms = line_str_terms_upd
                 for str_term in line_str_terms:
                     #equations_dict[eq_name].append(re.sub('[\[\]\'p\(\)\,x ]', '', str_term))
-                    equations_dict[eq_name].append(re.sub('[\[\]\'p\,x ]', '', str_term)[:-1])        
+                    term = re.sub('[\[\]\'p\,x ]', '', str_term.strip())[2:-1]
+                    if term.count('(') != term.count(')'):
+                        raise ValueError('Count of left brackets does not correpond count of right brackets!')
+                    equations_dict[eq_name].append(term)        
     return equations_dict
 
 def read_init_values_file(init_values_file_name):
@@ -114,7 +124,7 @@ def get_Jacobian(equations_dict):
     return J_str
 
 def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
-    for py_pow in re_res_positive_pow:
+    for py_pow in re_res_positive_pow:                  
         index_py_pow = eq.index(py_pow)
         cur_py_pow = py_pow
         if py_pow[0] == ')':
@@ -184,10 +194,18 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                                 new_j_eq = str(jac_mat[i - 1][j - 1])
                                 #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq) 
                                 # W*k1 + G*M*a1/E**2 + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)) - G*(G + J)**2*r1/(E**3*(Lm + (G + J)/E)**2)                               
+                                #Old implementation
+                                # re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                # while len(re_res_positive_pow) != 0:                                
+                                #     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
+                                #     re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+
                                 re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 while len(re_res_positive_pow) != 0:                                
                                     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
-                                    re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                    re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq)
+                                    re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 for repl_ch in repl_dict:
                                     new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
@@ -259,9 +277,11 @@ def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_cou
                                 #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq) 
                                 # W*k1 + G*M*a1/E**2 + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)) - G*(G + J)**2*r1/(E**3*(Lm + (G + J)/E)**2)                               
                                 re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 while len(re_res_positive_pow) != 0:                                
                                     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
                                     re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                    re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 for repl_ch in repl_dict:
                                     new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
                                 updated_c_code_solve_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
