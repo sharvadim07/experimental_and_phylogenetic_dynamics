@@ -13,6 +13,14 @@
             "args": ["-eexample_data/zODE4r_equation_v2_fixed_init_var.txt", "-texample_data/target_tragectory_one_var.txt", "-n16"]
         },
         {
+            "name": "Python: expdyn_gen_debinfer_in.py 2",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["-eexample_data/zODE4r_equation_v2_par_mod_k_in_W_D_add_k3_set_min_max10.txt"]
+        },
+        {
             "name": "Python: find_residual.py",
             "type": "python",
             "request": "launch",
@@ -27,6 +35,14 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": ["-eexample_data/zODE4r_equation_v2_fixed_init_var.txt", "-rexample_data/repl_dict.txt", "-sexample_data/step_list.txt", "-dexample_data/deBInfer_output_Nth.txt"]
+        },
+        {
+            "name": "Python: gen_targ_traj_from_table.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["-texample_data/W_table", "-rr1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12"]
         }
     ]
 }
