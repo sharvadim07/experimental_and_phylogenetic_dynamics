@@ -32,10 +32,20 @@ def read_equations_file(equations_file_name):
                 eq_name = eq_name_reres.group(1)               
                 equations_dict[eq_name] = []
                 repl_dict[eq_name] = 'x[' + str(eq_counter) + ']'
-                line_str_terms = line.strip().split('+(')[1:]
+                delimiters = "+(p", "+(-p"
+                regexPattern = '(' + '|'.join(map(re.escape, delimiters)) + ')'
+                line_str_terms = re.split(regexPattern, line.strip())[1:]
+                line_str_terms_upd = []
+                for i, str_term in enumerate(line_str_terms):
+                    if i % 2 == 0:
+                        line_str_terms_upd.append(line_str_terms[i] + line_str_terms[i + 1])
+                line_str_terms = line_str_terms_upd
                 for str_term in line_str_terms:
                     #equations_dict[eq_name].append(re.sub('[\[\]\'p\(\)\,x ]', '', str_term))
-                    equations_dict[eq_name].append(re.sub('[\[\]\'p\,x ]', '', str_term)[:-1])        
+                    term = re.sub('[\[\]\'p\,x ]', '', str_term.strip())[2:-1]
+                    if term.count('(') != term.count(')'):
+                        raise ValueError('Count of left brackets does not correpond count of right brackets!')
+                    equations_dict[eq_name].append(term)        
     return equations_dict
 
 def read_init_values_file(init_values_file_name):
@@ -114,7 +124,7 @@ def get_Jacobian(equations_dict):
     return J_str
 
 def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
-    for py_pow in re_res_positive_pow:
+    for py_pow in re_res_positive_pow:                  
         index_py_pow = eq.index(py_pow)
         cur_py_pow = py_pow
         if py_pow[0] == ')':
@@ -129,7 +139,7 @@ def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
                 if bracket_right_counter == bracket_left_counter and \
                     eq[index_py_pow - i - 2] in '*/+-':
                     break                   
-        else:
+        elif index_py_pow != 0:
             for i, ch in enumerate(eq[index_py_pow - 1::-1]):                
                 if eq[index_py_pow - i - 1] in '*/+-(':
                     break 
@@ -184,10 +194,18 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                                 new_j_eq = str(jac_mat[i - 1][j - 1])
                                 #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq) 
                                 # W*k1 + G*M*a1/E**2 + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)) - G*(G + J)**2*r1/(E**3*(Lm + (G + J)/E)**2)                               
+                                #Old implementation
+                                # re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                # while len(re_res_positive_pow) != 0:                                
+                                #     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
+                                #     re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+
                                 re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 while len(re_res_positive_pow) != 0:                                
                                     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
-                                    re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                    re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq)
+                                    re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 for repl_ch in repl_dict:
                                     new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
@@ -259,9 +277,11 @@ def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_cou
                                 #re_res_positive_pow = re.findall(r'.*(\(.+\)\*\*[0-9]+).*', new_j_eq) 
                                 # W*k1 + G*M*a1/E**2 + G*(G + J)*r1/(E**2*(Lm + (G + J)/E)) - G*(G + J)**2*r1/(E**3*(Lm + (G + J)/E)**2)                               
                                 re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 while len(re_res_positive_pow) != 0:                                
                                     new_j_eq = replace_py_pow_to_c_pow(new_j_eq, re_res_positive_pow)
                                     re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
+                                    re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 for repl_ch in repl_dict:
                                     new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
                                 updated_c_code_solve_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
@@ -291,6 +311,31 @@ def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par
                                     str(par_init_values_dict[par + '_min']) + '\t' + \
                                     str(par_init_values_dict[par + '_max']) + '\t' + \
                                     '# ' + par + '\n')
+
+def generate_user_priors_file(user_priors_file_name, par_init_values_dict, par_name_list):
+    with open(user_priors_file_name, 'w') as user_priors_file:        
+        import math
+        for par in par_name_list:            
+            min_val = float(par_init_values_dict[par + '_min'])
+            max_val = float(par_init_values_dict[par + '_max'])
+            gmean = 1.0
+            span = 1.0
+            distribution_type = 'norm'
+            if (min_val - max_val) == 0:
+                distribution_type = 'fixed'
+                gmean = min_val
+                span = 1.0
+            elif min_val > max_val:
+                raise ValueError ('ERROR: minimum value exceeds maximum value for a parameter!')
+            elif min_val < 0:
+                raise ValueError ('ERROR: negative value of a minimum value for a parameter!')
+            else:
+                gmean = (min_val * max_val) ** 0.5
+                span = math.log10(max_val/gmean)            
+            user_priors_file.write(repl_dict[par].replace('[','').replace(']','') + '\t' + \
+                                    distribution_type + '\t' + \
+                                    str(gmean) + '\t' + \
+                                    str(span) + '\n')
                         
 def gen_initial_values_deBInfer(initial_values_deBInfer_file_name, var_init_values_dict):
     with open(initial_values_deBInfer_file_name, 'w') as initial_values_deBInfer_file:
@@ -328,7 +373,8 @@ par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_fil
 
 edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_name_list))
 edit_solve_C_code(os.path.dirname(os.path.realpath(__file__)) + "/solve.cpp", equations_dict, len(par_name_list), var_init_values_dict)
-generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
+#generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
+generate_user_priors_file('parsed_userpriors.txt', par_init_values_dict, par_name_list)
 gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict)
 write_names_dict('repl_dict.txt')
 

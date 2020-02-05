@@ -10,6 +10,8 @@ parser.add_argument('-s','--step_list', type=str,
                     help='List of number steps.', required=True)
 parser.add_argument('-d','--debinfer_output', type=str,                   
                     help='Debinfer output with one set parameters for ODE.', required=True)
+# parser.add_argument('-m','--multiple_range', type=str,                   
+#                     help='Multiplier and divider value for min and max value for paramater range.', required=False)
 
 args = parser.parse_args()      
 
@@ -48,6 +50,16 @@ def write_unified_params_file(unified_params_file_name, par_init_values_dict, st
                                       '\t'.join([str(par_init_values_dict[str(step) + '_' + par_name]) for par_name in par_names_tuple]) + \
                                        '\n')
 
+def find_min_max_value(init_values_line_list, raw_name):    
+    max_val = ''
+    min_val = ''
+    for line in init_values_line_list:
+        if raw_name + '_max' in line:
+            max_val = line.strip().split('=')[1]
+        elif raw_name + '_min' in line:
+            min_val = line.strip().split('=')[1]
+    return float(min_val), float(max_val)
+
 def read_write_init_values_file(init_values_file_name, par_init_values_dict, step_list):
     init_values_line_list = []
     with open(init_values_file_name, 'r') as init_values_file:
@@ -80,6 +92,18 @@ def read_write_init_values_file(init_values_file_name, par_init_values_dict, ste
                     if '_initval' in raw_name and str(step) + '_' + par_name in par_init_values_dict:                                      
                         out_eq_init_values_file.write(raw_name + '=' + \
                                                       str(par_init_values_dict[str(step) + '_' + par_name]) + \
+                                                      '\n')
+                    elif '_max' in raw_name and str(step) + '_' + par_name in par_init_values_dict:
+                        min_val, max_val = find_min_max_value(init_values_line_list, raw_name.replace('_max', ''))
+                        mul_val = (max_val/min_val)**0.5
+                        out_eq_init_values_file.write(raw_name + '=' + \
+                                                      str(par_init_values_dict[str(step) + '_' + par_name] * mul_val) + \
+                                                      '\n')
+                    elif '_min' in raw_name and str(step) + '_' + par_name in par_init_values_dict:
+                        min_val, max_val = find_min_max_value(init_values_line_list, raw_name.replace('_min', ''))
+                        mul_val = (max_val/min_val)**0.5
+                        out_eq_init_values_file.write(raw_name + '=' + \
+                                                      str(par_init_values_dict[str(step) + '_' + par_name] / mul_val) + \
                                                       '\n')
                     else:
                         out_eq_init_values_file.write(line)                    
