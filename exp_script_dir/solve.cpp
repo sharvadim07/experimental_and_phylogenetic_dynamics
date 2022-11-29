@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <unistd.h>
+//#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
+
+
 #include <iostream>
 #include <fstream>
 #include <utility>
@@ -269,7 +276,27 @@ void print_iter(const vector_type &x , const double t) {
 }
 
 
+pid_t child_pid = -1;
+
+//void catchAlarm(int sig) {
+    //std::cerr << "You will now die, Mr Solver!!\n";
+//    kill(child_pid,SIGKILL);
+//}
+
 int main(int argc, char** argv) {
+
+	// Die in 30 seconds....
+        //signal(SIGALRM, catchAlarm);
+        //alarm(30); 
+
+	//struct sigaction sact;
+	//sigemptyset(&sact.sa_mask);
+	//sact.sa_flags = 0;
+	//sact.sa_handler = catchAlarm;
+	//sigaction(SIGALRM, &sact, NULL);
+	//alarm(30);
+	
+
 	if (argc != param_num + 5) {
 		cerr << argc << endl;
 		cerr << "Please provide parameters (t1, t2, step, accuracy, a1, a2, ...)" << endl;
@@ -309,9 +336,26 @@ int main(int argc, char** argv) {
 	// x[10] = 0.;
 	// x[11] = 0.;
 	// x[12] = 0.;
-	integrate_const(make_dense_output< rosenbrock4< double > >( accuracy , accuracy ), 
-					make_pair(f(), f_jacobi()), 
-					x, t1, t2, h, print_iter);
-
+	    //clock_t tStart = clock();
+	    child_pid = fork();
+	    int st = 0;
+	    if (child_pid == 0) {
+	            integrate_const(make_dense_output< rosenbrock4< double > >( accuracy , accuracy ), 
+	              make_pair(f(), f_jacobi()), 
+	              x, t1, t2, h, print_iter);
+	              exit(0);
+	    }
+	    else {
+		clock_t t_start = clock();
+		pid_t result = waitpid(child_pid, &st, WNOHANG);
+		while(result != 0 && ((float)(clock()-t_start))/CLOCKS_PER_SEC < 60){
+		    result = waitpid(child_pid, &st, WNOHANG);
+		}
+		if (result != 0){
+		    std::cerr << "Solver runs too long kill him (more than 60 seconds)!\n";
+		    kill(child_pid,SIGKILL);
+		}
+	    }
+	wait(&st);
 	return 0;
 }

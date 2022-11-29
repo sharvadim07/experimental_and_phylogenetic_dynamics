@@ -86,9 +86,13 @@ def read_write_init_values_file(init_values_file_name, par_init_values_dict, ste
                     out_eq_init_values_file.write(line)               
                     continue
                 if StartValuesOfparameters == True and StartValuesOfequations == False:                           
+                    # raw_name, value = line.strip().split('=')
+                    # par_spec = raw_name[0] + raw_name[2:] 
+                    # par_name = par_spec.split('_')[0] 
                     raw_name, value = line.strip().split('=')
-                    par_spec = raw_name[0] + raw_name[2:] 
-                    par_name = par_spec.split('_')[0] 
+                    raw_name_splitted = raw_name.split('_')
+                    par_spec = raw_name
+                    par_name = '_'.join(raw_name_splitted[:-1]) 
                     if '_initval' in raw_name and str(step) + '_' + par_name in par_init_values_dict:                                      
                         out_eq_init_values_file.write(raw_name + '=' + \
                                                       str(par_init_values_dict[str(step) + '_' + par_name]) + \

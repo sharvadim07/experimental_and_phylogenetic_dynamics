@@ -15,14 +15,15 @@ parser.add_argument('-n','--num_of_target_points', type=str,
 # parser.add_argument('-l','--mcmc_iter', type=int,                   
 #                     help='Number of mcmc iterations.', required=True)
 
-args = parser.parse_args()      
+
 
 #Replace A -> x[1] ...
-repl_dict = {}
+#repl_dict = {}
 
 
 def read_equations_file(equations_file_name):
     equations_dict = {}    
+    repl_dict = {}
     with open(equations_file_name, 'r') as equations_file:        
         eq_counter = 0
         for line in equations_file:
@@ -42,13 +43,15 @@ def read_equations_file(equations_file_name):
                 line_str_terms = line_str_terms_upd
                 for str_term in line_str_terms:
                     #equations_dict[eq_name].append(re.sub('[\[\]\'p\(\)\,x ]', '', str_term))
-                    term = re.sub('[\[\]\'p\,x ]', '', str_term.strip())[2:-1]
+                    #term = re.sub('[\[\]\'p\,x ]', '', str_term.strip())[2:-1]
+                    term = re.sub(r'(p\[\')|(x\[,\')|(\'\])|(^\+\()|(\)$)', '', str_term.strip())
+                    term = re.sub(r'(\+-)|(-\+)', '-', term)
                     if term.count('(') != term.count(')'):
                         raise ValueError('Count of left brackets does not correpond count of right brackets!')
                     equations_dict[eq_name].append(term)        
-    return equations_dict
+    return equations_dict, repl_dict
 
-def read_init_values_file(init_values_file_name):
+def read_init_values_file(init_values_file_name, repl_dict):
     par_init_values_dict = {}
     var_init_values_dict = {}
     par_name_list = []
@@ -72,8 +75,9 @@ def read_init_values_file(init_values_file_name):
                 continue
             if StartValuesOfparameters == True and StartValuesOfequations == False:                           
                 raw_name, value = line.strip().split('=')
-                par_spec = raw_name[0] + raw_name[2:] 
-                par_name = par_spec.split('_')[0]               
+                raw_name_splitted = raw_name.split('_')
+                par_spec = raw_name
+                par_name = '_'.join(raw_name_splitted[:-1])               
                 if par_name not in par_name_list:
                      param_counter += 1   
                      par_name_list.append(par_name)
@@ -85,7 +89,8 @@ def read_init_values_file(init_values_file_name):
             if StartValuesOfparameters == False and StartValuesOfequations == True:
                 #var_counter += 1
                 raw_name, value = line.strip().split('=')
-                var_spec = raw_name.split('_')[0] + '_' + raw_name.split('_')[2]
+                var_spec = raw_name
+                #var_spec = raw_name.split('_')[0] + '_' + raw_name.split('_')[2]
                 #var_name = var_spec.split('_')[0]
                 #var_name_list.append(var_name)
                 try:
@@ -114,7 +119,8 @@ def get_Jacobian(equations_dict):
             new_eq_dict[eq] = [term.replace('E', 'RE') for term in equations_dict[eq]]
 
     variables = symengine.symbols(' '.join(new_eq_dict)) # Define variables
-    f = symengine.sympify(['+'.join(new_eq_dict[eq]).replace('+-','-') for eq in new_eq_dict]) # Define function
+    eq_list = ['+'.join(new_eq_dict[eq]).replace('+-','-') for eq in new_eq_dict]
+    f = symengine.sympify(eq_list) # Define function
     #J = symengine.zeros(len(f),len(variables)) # Initialise Jacobian matrix
     J_str = [['' for x in range(len(variables))] for y in range(len(f))] # Initialise Jacobian matrix with strings
     # Fill Jacobian matrix with entries
@@ -137,7 +143,7 @@ def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
                     bracket_left_counter += 1
                 cur_py_pow = ch + cur_py_pow
                 if bracket_right_counter == bracket_left_counter and \
-                    eq[index_py_pow - i - 2] in '*/+-':
+                    eq[index_py_pow - i - 2] in '*/+-(':
                     break                   
         elif index_py_pow != 0:
             for i, ch in enumerate(eq[index_py_pow - 1::-1]):                
@@ -150,7 +156,7 @@ def replace_py_pow_to_c_pow(eq, re_res_positive_pow):
         new_j_eq = eq.replace(cur_py_pow, 'pow(' + exp_number + ',' + exponent + ')')
     return new_j_eq
 
-def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counter):    
+def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counter, repl_dict):    
     with open(c_code_pattern_file_name, 'r') as c_code_pattern_file:
         with open('updated_' + os.path.basename(c_code_pattern_file_name), 'w') as updated_c_code_file:
             need_add_num_par = False
@@ -177,7 +183,8 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                     for eq in equations_dict:
                         new_eq = '+'.join(equations_dict[eq]).replace('+-','-')
                         for repl_ch in repl_dict:
-                            new_eq = new_eq.replace(repl_ch, repl_dict[repl_ch])
+                            #new_eq = new_eq.replace(repl_ch, repl_dict[repl_ch])
+                            new_eq = re.sub(rf"(^|[\*\+\-\(\)\/\,]|\s)({repl_ch})($|[\*\+\-\(\)\/\,]|\s)", rf'\1{repl_dict[repl_ch]}\3', new_eq)
                         new_eq = 'res' + repl_dict[eq][1:] + '=' + new_eq
                         updated_c_code_file.write(new_eq + ';\n')
                     need_add_derivs_eq = False
@@ -207,13 +214,14 @@ def edit_equation_C_code(c_code_pattern_file_name, equations_dict, params_counte
                                     re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq)
                                     re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 for repl_ch in repl_dict:
-                                    new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
+                                    #new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
+                                    new_j_eq = re.sub(rf"(^|[\*\+\-\(\)\/\,]|\s)({repl_ch})($|[\*\+\-\(\)\/\,]|\s)", rf'\1{repl_dict[repl_ch]}\3', new_j_eq)
                                 updated_c_code_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
                     need_add_jacobian = False
                 else:
                     updated_c_code_file.write(c_code_patt_line) 
 
-def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_counter, var_init_values_dict): 
+def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_counter, var_init_values_dict, repl_dict): 
     with open(c_code_solve_pattern_file_name, 'r') as c_code_solve_pattern_file:
         with open('updated_' + os.path.basename(c_code_solve_pattern_file_name), 'w') as updated_c_code_solve_file:
             need_add_num_par = False
@@ -259,7 +267,7 @@ def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_cou
                     for eq in equations_dict:
                         new_eq = '+'.join(equations_dict[eq]).replace('+-','-')
                         for repl_ch in repl_dict:
-                            new_eq = new_eq.replace(repl_ch, repl_dict[repl_ch])
+                            new_eq = re.sub(rf"(^|[\*\+\-\(\)\/\,]|\s)({repl_ch})($|[\*\+\-\(\)\/\,]|\s)", rf'\1{repl_dict[repl_ch]}\3', new_eq)
                         new_eq = 'res' + repl_dict[eq][1:] + '=' + new_eq
                         updated_c_code_solve_file.write(new_eq + ';\n')
                     need_add_derivs_eq = False
@@ -283,7 +291,8 @@ def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_cou
                                     re_res_positive_pow = re.findall(r'.*(.{1,3}\*\*[0-9]+).*', new_j_eq) 
                                     re_res_positive_pow += re.findall(r'.*(.{1,3}\*\*\(\-[0-9]+\)).*', new_j_eq)
                                 for repl_ch in repl_dict:
-                                    new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
+                                    #new_j_eq = new_j_eq.replace(repl_ch, repl_dict[repl_ch])
+                                    new_j_eq = re.sub(rf"(^|[\*\+\-\(\)\/\,]|\s)({repl_ch})($|[\*\+\-\(\)\/\,]|\s)", rf'\1{repl_dict[repl_ch]}\3', new_j_eq)
                                 updated_c_code_solve_file.write('J('+ str(i) +', '+ str(j) +') = '+ new_j_eq +';\n')
                     need_add_jacobian = False
                 elif need_add_dfdt == True:
@@ -303,7 +312,7 @@ def edit_solve_C_code(c_code_solve_pattern_file_name, equations_dict, params_cou
 
 
 
-def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par_name_list):
+def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par_name_list, repl_dict):
     with open(param_ranges_file_name, 'w') as param_ranges_file:
         param_ranges_file.write('Param\tMin\tMax\t# Comment\n')
         for par in par_name_list:
@@ -312,7 +321,7 @@ def generate_param_ranges_file(param_ranges_file_name, par_init_values_dict, par
                                     str(par_init_values_dict[par + '_max']) + '\t' + \
                                     '# ' + par + '\n')
 
-def generate_user_priors_file(user_priors_file_name, par_init_values_dict, par_name_list):
+def generate_user_priors_file(user_priors_file_name, par_init_values_dict, par_name_list, repl_dict):
     with open(user_priors_file_name, 'w') as user_priors_file:        
         import math
         for par in par_name_list:            
@@ -337,48 +346,55 @@ def generate_user_priors_file(user_priors_file_name, par_init_values_dict, par_n
                                     str(gmean) + '\t' + \
                                     str(span) + '\n')
                         
-def gen_initial_values_deBInfer(initial_values_deBInfer_file_name, var_init_values_dict):
+def gen_initial_values_deBInfer(initial_values_deBInfer_file_name, var_init_values_dict, repl_dict):
     with open(initial_values_deBInfer_file_name, 'w') as initial_values_deBInfer_file:
         for var_init_val in var_init_values_dict:
             if '_initval' in var_init_val:
                 initial_values_deBInfer_file.write(repl_dict[var_init_val.split('_')[0]].replace('[','').replace(']','') + \
                                                     '=' + str(var_init_values_dict[var_init_val]) + '\n')
 
-def write_names_dict(names_dict_file_name):
+def write_names_dict(names_dict_file_name, repl_dict):
     with open(names_dict_file_name, 'w') as names_dict_file:
         for repl in repl_dict:
             names_dict_file.write(repl + '\t' + repl_dict[repl].replace('[','').replace(']','') + '\n')
 
-def edit_target_traj_file(target_traj_file_name, num_of_target_points):
+def edit_target_traj_file(target_traj_file_name, num_of_target_points, repl_dict):
     num_lines_in_target_traj_file = sum(1 for line in open(target_traj_file_name, 'r'))
     with open(target_traj_file_name, 'r') as in_target_traj_file:        
         step = int((num_lines_in_target_traj_file-1)/int(num_of_target_points))
         with open('updated_target_trajectory.txt', 'w') as out_target_traj_file:
+            line_in_list = []
             for i, line_in in enumerate(in_target_traj_file):
-                line_in_list = line_in.strip().split('\t')
+                line_in_splitted = line_in.strip().split('\t')
                 if i == 0:
-                    new_line_in_list = [repl_dict[re.sub('[0-9]', '', el_line_in_list)].replace('[','').replace(']','') 
-                                        if el_line_in_list != 't' 
+                    new_line_in_splitted = [repl_dict[re.sub('[0-9]', '', el_line_in_splitted)].replace('[','').replace(']','') 
+                                        if el_line_in_splitted != 't' 
                                         else 'time'  
-                                        for el_line_in_list in line_in_list[1:]]
-                    out_target_traj_file.write('\t'.join(new_line_in_list) + '\n')
+                                        for el_line_in_splitted in line_in_splitted[1:]]
+                    out_target_traj_file.write('\t'.join(new_line_in_splitted) + '\n')
                 elif i%step == 0 :
-                    out_target_traj_file.write('\t'.join(line_in_list[1:]) + '\n')
-                
+                    line_in_list.append(line_in_splitted[1:])
+                    #out_target_traj_file.write('\t'.join(line_in_splitted[1:]) + '\n')
+            line_in_list = sorted(line_in_list, key=lambda x: float(x[0]))
+            for line_in_splitted in line_in_list:
+                out_target_traj_file.write('\t'.join(line_in_splitted) + '\n')
+
+def main():
+    args = parser.parse_args()      
+    equations_dict, repl_dict = read_equations_file(args.equations)
+    par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_file(args.equations, repl_dict)
 
 
-equations_dict = read_equations_file(args.equations)
-par_init_values_dict, var_init_values_dict, par_name_list = read_init_values_file(args.equations)
+    edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_name_list), repl_dict)
+    edit_solve_C_code(os.path.dirname(os.path.realpath(__file__)) + "/solve.cpp", equations_dict, len(par_name_list), var_init_values_dict, repl_dict)
+    #generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
+    generate_user_priors_file('parsed_userpriors.txt', par_init_values_dict, par_name_list, repl_dict)
+    gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict, repl_dict)
+    write_names_dict('repl_dict.txt', repl_dict)
 
+    if args.target_traj != None and args.num_of_target_points != None:
+        edit_target_traj_file(args.target_traj, args.num_of_target_points, repl_dict)
 
-edit_equation_C_code(os.path.dirname(os.path.realpath(__file__)) + "/equation.c", equations_dict, len(par_name_list))
-edit_solve_C_code(os.path.dirname(os.path.realpath(__file__)) + "/solve.cpp", equations_dict, len(par_name_list), var_init_values_dict)
-#generate_param_ranges_file('ParamRanges.txt', par_init_values_dict, par_name_list)
-generate_user_priors_file('parsed_userpriors.txt', par_init_values_dict, par_name_list)
-gen_initial_values_deBInfer('initial_values_deBInfer_formatted.txt', var_init_values_dict)
-write_names_dict('repl_dict.txt')
-
-if args.target_traj != None and args.num_of_target_points != None:
-    edit_target_traj_file(args.target_traj, args.num_of_target_points)
-    
+if __name__ == "__main__":
+    main()
 
