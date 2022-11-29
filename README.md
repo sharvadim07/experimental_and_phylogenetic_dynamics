@@ -22,7 +22,7 @@ FIRST_DYN=$11 # Set which dynamics will started first: Experimental dynamics (ex
 NUM_GOOD_RES_TR_L=$12 # The number of parameter sets that have a good residual and tree probability and have maximum variability
 wR=$13 # Coeficient of Residual/min_residual ratio for weighted average sum (wR)
 
-``
+```
 
 ### Example
 Example input files in /example_in directory.
